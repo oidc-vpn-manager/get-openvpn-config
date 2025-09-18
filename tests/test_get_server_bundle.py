@@ -1,5 +1,5 @@
 """
-Tests for the get_openvpn_config script's server bundle functionality.
+Tests for the get_openvpn_server_config script's server bundle functionality.
 """
 
 import io
@@ -12,8 +12,9 @@ from unittest.mock import patch, MagicMock
 import requests
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from get_openvpn_config import *
+from get_openvpn_server_config import *
 
 
 class TestServerBundleIntegration:
@@ -21,7 +22,7 @@ class TestServerBundleIntegration:
 
     def test_get_profile_with_psk_calls_server_bundle_endpoint(self):
         """Test that get_profile_with_psk calls the correct server bundle endpoint."""
-        with patch('get_openvpn_config.requests.get') as mock_get:
+        with patch('get_openvpn_server_config.requests.get') as mock_get:
             # Setup mock response
             mock_response = MagicMock()
             mock_response.content = b'test-tar-content'
@@ -46,7 +47,7 @@ class TestServerBundleIntegration:
 
     def test_get_profile_with_psk_handles_http_errors(self):
         """Test that get_profile_with_psk properly handles HTTP errors."""
-        with patch('get_openvpn_config.requests.get') as mock_get:
+        with patch('get_openvpn_server_config.requests.get') as mock_get:
             # Setup mock to raise HTTP error
             mock_response = MagicMock()
             mock_response.raise_for_status.side_effect = requests.HTTPError("404 Not Found")
@@ -107,30 +108,27 @@ class TestServerBundleIntegration:
         with tempfile.TemporaryDirectory() as temp_dir:
             result = extract_server_files(tar_content, temp_dir)
             
-            # Verify directory structure
-            assert result['cert_dir'] == Path(temp_dir) / "cert"
-            assert result['key_dir'] == Path(temp_dir) / "key"
-            assert result['udp_dir'] == Path(temp_dir) / "udp-1194"
-            assert result['tcp_dir'] == Path(temp_dir) / "tcp-443"
-            
-            # Verify files were extracted correctly
-            ca_cert_path = result['cert_dir'] / "ca-chain.crt"
+            # Verify flat directory structure - all files in target_dir
+            assert result['target_dir'] == Path(temp_dir)
+
+            # Verify files were extracted correctly to flat structure
+            ca_cert_path = result['target_dir'] / "ca-chain.crt"
             assert ca_cert_path.exists()
             assert b'test-ca-cert' in ca_cert_path.read_bytes()
-            
-            server_cert_path = result['cert_dir'] / "server.crt"
+
+            server_cert_path = result['target_dir'] / "server.crt"
             assert server_cert_path.exists()
             assert b'test-server-cert' in server_cert_path.read_bytes()
-            
-            server_key_path = result['key_dir'] / "server.key"
+
+            server_key_path = result['target_dir'] / "server.key"
             assert server_key_path.exists()
             assert b'test-server-key' in server_key_path.read_bytes()
-            
-            udp_config_path = result['udp_dir'] / "server-udp-1194.ovpn"
+
+            udp_config_path = result['target_dir'] / "server-udp-1194.ovpn"
             assert udp_config_path.exists()
             assert b'proto udp' in udp_config_path.read_bytes()
-            
-            tcp_config_path = result['tcp_dir'] / "server-tcp-443.ovpn"
+
+            tcp_config_path = result['target_dir'] / "server-tcp-443.ovpn"
             assert tcp_config_path.exists()
             assert b'proto tcp' in tcp_config_path.read_bytes()
 
@@ -159,10 +157,13 @@ class TestServerBundleIntegration:
             # Should not raise an error with empty TLS key
             result = extract_server_files(tar_content, temp_dir)
             
-            # TLS key file should exist but be empty (since it gets skipped due to unknown type)
-            # But CA cert should be extracted
-            ca_cert_path = result['cert_dir'] / "ca-chain.crt"
+            # TLS key file should be extracted to flat structure
+            # CA cert should be extracted
+            ca_cert_path = result['target_dir'] / "ca-chain.crt"
             assert ca_cert_path.exists()
+
+            tls_key_path = result['target_dir'] / "tls-crypt.key"
+            assert tls_key_path.exists()
 
     def test_extract_server_files_handles_missing_files(self):
         """Test extract_server_files gracefully handles missing expected files."""
@@ -183,14 +184,11 @@ class TestServerBundleIntegration:
             # Should not raise an error
             result = extract_server_files(tar_content, temp_dir)
             
-            # Should create all expected directories even if files are missing
-            assert result['cert_dir'].exists()
-            assert result['key_dir'].exists()
-            assert result['udp_dir'].exists()
-            assert result['tcp_dir'].exists()
-            
+            # Should create target directory even if files are missing
+            assert result['target_dir'].exists()
+
             # Only CA cert should be present
-            ca_cert_path = result['cert_dir'] / "ca-chain.crt"
+            ca_cert_path = result['target_dir'] / "ca-chain.crt"
             assert ca_cert_path.exists()
 
     def test_extract_server_files_creates_target_directory(self):
@@ -213,16 +211,14 @@ class TestServerBundleIntegration:
             # Should create the directory structure
             result = extract_server_files(tar_content, str(target_dir))
             
-            # Verify directories were created
+            # Verify directory was created
             assert target_dir.exists()
-            assert result['cert_dir'].exists()
-            assert result['key_dir'].exists()
-            assert result['udp_dir'].exists()
-            assert result['tcp_dir'].exists()
+            assert result['target_dir'].exists()
+            assert result['target_dir'] == target_dir
 
     def test_get_profile_with_psk_timeout_handling(self):
         """Test that get_profile_with_psk respects timeout parameter."""
-        with patch('get_openvpn_config.requests.get') as mock_get:
+        with patch('get_openvpn_server_config.requests.get') as mock_get:
             # Setup mock response
             mock_response = MagicMock()
             mock_response.content = b'test-content'
@@ -244,16 +240,10 @@ class TestServerBundleIntegration:
         """Test that Config class works correctly with server bundle functionality."""
         # Test with various config sources
         config = Config(
-            server_url='http://configured-server',
-            output='/configured/path',
-            overwrite=True,
-            options='option1,option2'
+            server_url='http://configured-server'
         )
-        
+
         assert config.server_url == 'http://configured-server'
-        assert config.output_path == Path('/configured/path')
-        assert config.overwrite == True
-        assert config.options == 'option1,option2'
 
     def test_extract_server_files_file_classification(self):
         """Test that extract_server_files correctly classifies different file types."""
@@ -283,32 +273,32 @@ class TestServerBundleIntegration:
         with tempfile.TemporaryDirectory() as temp_dir:
             result = extract_server_files(tar_content, temp_dir)
             
-            # Verify files went to correct directories
-            ca_cert = result['cert_dir'] / 'ca-chain.crt'
+            # Verify files went to flat target directory
+            ca_cert = result['target_dir'] / 'ca-chain.crt'
             assert ca_cert.exists()
             assert ca_cert.read_bytes() == b'ca-cert-content'
-            
-            server_cert = result['cert_dir'] / 'server.crt'
+
+            server_cert = result['target_dir'] / 'server.crt'
             assert server_cert.exists()
             assert server_cert.read_bytes() == b'server-cert-content'
-            
-            server_key = result['key_dir'] / 'server.key'
+
+            server_key = result['target_dir'] / 'server.key'
             assert server_key.exists()
             assert server_key.read_bytes() == b'server-key-content'
-            
-            udp_config = result['udp_dir'] / 'server-udp-1194.ovpn'
+
+            udp_config = result['target_dir'] / 'server-udp-1194.ovpn'
             assert udp_config.exists()
             assert udp_config.read_bytes() == b'udp-config-content'
-            
-            tcp_config = result['tcp_dir'] / 'server-tcp-443.ovpn'
+
+            tcp_config = result['target_dir'] / 'server-tcp-443.ovpn'
             assert tcp_config.exists()
             assert tcp_config.read_bytes() == b'tcp-config-content'
-            
-            tls_auth = result['cert_dir'] / 'tls-auth.pem'
+
+            tls_auth = result['target_dir'] / 'tls-auth.pem'
             assert tls_auth.exists()
             assert tls_auth.read_bytes() == b'tls-auth-content'
-            
-            # Unknown file should not exist anywhere
-            for dir_result in result.values():
-                unknown_file = dir_result / 'unknown-file.txt'
-                assert not unknown_file.exists()
+
+            # Unknown file should be extracted to flat structure (all files get extracted now)
+            unknown_file = result['target_dir'] / 'unknown-file.txt'
+            assert unknown_file.exists()
+            assert unknown_file.read_bytes() == b'unknown-content'

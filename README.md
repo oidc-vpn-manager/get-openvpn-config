@@ -1,20 +1,31 @@
-# OpenVPN Config Tool
+# OpenVPN Config Tools
 
-A command-line client for retrieving OpenVPN profiles and server bundles from OpenVPN Manager. This tool supports both end-user profile retrieval via OIDC authentication and server configuration retrieval using pre-shared keys (PSKs).
+A collection of command-line clients for retrieving OpenVPN profiles and server bundles from OpenVPN Manager. The tools have been split into three specialized scripts for different use cases:
+
+- **`get_openvpn_profile.py`** - User profile retrieval via OIDC authentication
+- **`get_openvpn_server_config.py`** - Server configuration bundles via PSK authentication
+- **`get_openvpn_computer_config.py`** - Computer/device profiles via PSK authentication
 
 ## 🚀 Features
 
-### User Profile Retrieval
+### User Profile Retrieval (`get_openvpn_profile.py`)
 - **OIDC Authentication**: Seamless integration with enterprise identity providers
 - **Browser-based Flow**: Automatic browser opening for authentication
 - **Secure Download**: Time-limited tokens for secure profile delivery
 - **Configuration Options**: Support for UDP, TCP, or combined configurations
 
-### Server Bundle Retrieval  
+### Server Bundle Retrieval (`get_openvpn_server_config.py`)
 - **PSK Authentication**: Pre-shared key authentication for automated server deployment
 - **Complete Bundle**: Server certificates, CA chain, and OpenVPN configurations
 - **Automated Extraction**: Organized file structure for easy deployment
 - **Multiple Protocols**: Both UDP and TCP server configurations included
+
+### Computer Profile Retrieval (`get_openvpn_computer_config.py`)
+- **Administrative Tool**: For server administrators managing computer identities
+- **PSK Authentication**: Pre-shared key authentication for computer/device identities
+- **Site-to-Site VPN**: Designed for computer-to-computer VPN connections
+- **Managed Assets**: Perfect for automated deployment to managed devices by administrators
+- **Single Profile**: Returns a complete OpenVPN profile file
 
 ## 📦 Installation
 
@@ -28,54 +39,70 @@ A command-line client for retrieving OpenVPN profiles and server bundles from Op
 pip install -r requirements.txt
 ```
 
-### Make Executable
+### Make Scripts Executable
 ```bash
-chmod +x get_openvpn_config.py
+chmod +x get_openvpn_profile.py get_openvpn_server_config.py get_openvpn_computer_config.py
 ```
 
 ## 💻 Usage
 
-### User Profile Commands
+### User Profile Commands (`get_openvpn_profile.py`)
 
 #### Interactive Profile Retrieval
 ```bash
 # Basic usage with interactive authentication
-./get_openvpn_config.py get-oidc-profile --server-url https://vpn.company.com
+./get_openvpn_profile.py --server-url https://vpn.company.com
 
 # Specify output location
-./get_openvpn_config.py get-oidc-profile \
+./get_openvpn_profile.py \
   --server-url https://vpn.company.com \
   --output ~/my-vpn-profile.ovpn
 
 # Select TCP protocol instead of default UDP
-./get_openvpn_config.py get-oidc-profile \
+./get_openvpn_profile.py \
   --server-url https://vpn.company.com \
   --options tcp
 
 # Force overwrite existing file
-./get_openvpn_config.py get-oidc-profile \
+./get_openvpn_profile.py \
   --server-url https://vpn.company.com \
   --output ~/config.ovpn \
   --force
 ```
 
-### Server Bundle Commands
+### Server Bundle Commands (`get_openvpn_server_config.py`)
 
 #### Automated Server Configuration
 ```bash
 # Retrieve server bundle with PSK authentication
-./get_openvpn_config.py get-psk-profile \
+./get_openvpn_server_config.py \
   --server-url https://vpn.company.com \
-  --hostname vpn-server-01.company.com \
-  --psk your-psk-secret-here \
+  --psk your-server-psk-secret-here \
   --target-dir /etc/openvpn
 
 # Custom target directory
-./get_openvpn_config.py get-psk-profile \
+./get_openvpn_server_config.py \
   --server-url https://vpn.company.com \
-  --hostname vpn-server-02.company.com \
-  --psk your-psk-secret-here \
+  --psk your-server-psk-secret-here \
   --target-dir /opt/openvpn-config \
+  --force
+```
+
+### Computer Profile Commands (`get_openvpn_computer_config.py`)
+
+#### Administrative Computer Configuration
+```bash
+# Retrieve computer profile with PSK authentication (admin only)
+./get_openvpn_computer_config.py \
+  --server-url https://vpn.company.com \
+  --psk your-computer-psk-secret-here \
+  --output ~/computer-config.ovpn
+
+# Force overwrite existing file
+./get_openvpn_computer_config.py \
+  --server-url https://vpn.company.com \
+  --psk your-computer-psk-secret-here \
+  --output /etc/openvpn/client/computer.ovpn \
   --force
 ```
 
@@ -112,9 +139,6 @@ export OVPN_MANAGER_OVERWRITE=true
 
 # PSK for server authentication (keep secure!)
 export OVPN_PSK=your-server-psk-here
-
-# Server hostname for PSK requests
-export OVPN_HOSTNAME=vpn-server.company.com
 ```
 
 ### Configuration Precedence
@@ -139,7 +163,7 @@ export OVPN_MANAGER_URL=https://vpn.company.com
 export OVPN_MANAGER_OUTPUT=/tmp/vpn-profile.ovpn
 export OVPN_MANAGER_OVERWRITE=true
 
-./get_openvpn_config.py get-oidc-profile
+./get_openvpn_profile.py
 
 if [ $? -eq 0 ]; then
     echo "Profile downloaded successfully"
@@ -167,9 +191,8 @@ fi
 
 PSK=$(cat "$PSK_FILE")
 
-./get_openvpn_config.py get-psk-profile \
+./get_openvpn_server_config.py \
     --server-url https://vpn.company.com \
-    --hostname "$HOSTNAME" \
     --psk "$PSK" \
     --target-dir "$TARGET_DIR" \
     --force
@@ -184,6 +207,39 @@ else
 fi
 ```
 
+#### Computer Profile Deployment (Admin Only)
+```bash
+#!/bin/bash
+# Administrative script for deploying computer profiles
+
+COMPUTER_NAME="workstation-$(hostname)"
+PSK_FILE="/etc/openvpn-manager/computer.psk"
+OUTPUT_FILE="/etc/openvpn/client/${COMPUTER_NAME}.ovpn"
+
+if [ ! -f "$PSK_FILE" ]; then
+    echo "Computer PSK file not found: $PSK_FILE"
+    exit 1
+fi
+
+PSK=$(cat "$PSK_FILE")
+
+./get_openvpn_computer_config.py \
+    --server-url https://vpn.company.com \
+    --psk "$PSK" \
+    --output "$OUTPUT_FILE" \
+    --force
+
+if [ $? -eq 0 ]; then
+    echo "Computer profile deployed successfully: $OUTPUT_FILE"
+    # Set appropriate permissions for computer profile
+    chmod 600 "$OUTPUT_FILE"
+    systemctl restart openvpn-client@${COMPUTER_NAME}
+else
+    echo "Failed to deploy computer profile"
+    exit 1
+fi
+```
+
 ### Docker Integration
 
 #### User Profile Container
@@ -191,12 +247,12 @@ fi
 FROM python:3.11-slim
 
 WORKDIR /app
-COPY requirements.txt get_openvpn_config.py ./
+COPY requirements.txt get_openvpn_profile.py ./
 RUN pip install -r requirements.txt
 
 # For headless authentication in containers, you may need
 # to implement service account or API key authentication
-ENTRYPOINT ["python", "get_openvpn_config.py"]
+ENTRYPOINT ["python", "get_openvpn_profile.py"]
 ```
 
 #### Server Configuration Init Container
@@ -209,12 +265,9 @@ spec:
     image: openvpn-config-fetcher:latest
     command:
     - python
-    - get_openvpn_config.py
-    - get-psk-profile
+    - get_openvpn_server_config.py
     - --server-url
     - https://vpn.company.com
-    - --hostname
-    - $(HOSTNAME)
     - --psk
     - $(PSK_SECRET)
     - --target-dir
@@ -317,10 +370,16 @@ python -m pytest tests/ -v --integration
 
 ### Debug Mode
 
-Enable verbose logging:
+Enable verbose logging for debugging:
 ```bash
-export PYTHONPATH=/path/to/tool
-python -m logging.config get_openvpn_config.py --debug get-oidc-profile
+# For user profile issues
+python -v get_openvpn_profile.py --server-url https://vpn.company.com
+
+# For server config issues
+python -v get_openvpn_server_config.py --server-url https://vpn.company.com --psk your-psk
+
+# For computer profile issues
+python -v get_openvpn_computer_config.py --server-url https://vpn.company.com --psk your-psk
 ```
 
 ## 🤝 Contributing

@@ -1,5 +1,10 @@
 [run]
-omit = tests/*
+omit =
+    tests/*
+    /etc/*
+    /usr/*
+    /lib/*
+    /opt/*
 
 [report]
 show_missing = True
