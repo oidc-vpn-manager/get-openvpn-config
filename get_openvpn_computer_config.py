@@ -47,6 +47,14 @@ class Config:
         return None
 
     def _resolve_output_path(self, cli_arg):
+        """Resolves output file path with fallback to downloads directory.
+
+        Args:
+            cli_arg: Command-line output path argument or None
+
+        Returns:
+            Path: Resolved output file path for computer profile
+        """
         path_str = self._resolve(cli_arg, 'OVPN_MANAGER_OUTPUT', 'output')
         if path_str:
             return Path(os.path.expanduser(path_str))
@@ -57,6 +65,14 @@ class Config:
             return Path.home() / "computer-config.ovpn"
 
     def _resolve_overwrite_flag(self, cli_arg):
+        """Resolves overwrite flag from CLI, environment, or config sources.
+
+        Args:
+            cli_arg: Command-line overwrite flag or None
+
+        Returns:
+            bool: Whether to overwrite existing files
+        """
         if cli_arg is not None:
             return cli_arg
         overwrite_str = self._resolve(None, 'OVPN_MANAGER_OVERWRITE', 'overwrite')

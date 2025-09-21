@@ -104,9 +104,10 @@ class TestGetOVPNProfile:
         assert "Authentication timed out" in result.output
 
     @patch('get_openvpn_profile.get_profile_with_oidc')
-    def test_network_error_handling(self, mock_get_profile, runner):
+    @patch('get_openvpn_profile.requests.get')
+    def test_network_error_handling(self, mock_requests_get, mock_get_profile, runner):
         """Test handling of network errors."""
-        mock_get_profile.side_effect = requests.exceptions.ConnectionError("Network error")
+        mock_requests_get.side_effect = requests.exceptions.ConnectionError("Network error")
 
         result = runner.invoke(get_openvpn_profile.main, [
             '--server-url', 'https://test-server.com',

@@ -57,6 +57,14 @@ class Config:
         return None
 
     def _resolve_output_path(self, cli_arg):
+        """Resolves output file path with fallback to downloads directory.
+
+        Args:
+            cli_arg: Command-line output path argument or None
+
+        Returns:
+            Path: Resolved output file path for profile
+        """
         path_str = self._resolve(cli_arg, 'OVPN_MANAGER_OUTPUT', 'output')
         if path_str:
             return Path(os.path.expanduser(path_str))
@@ -67,6 +75,14 @@ class Config:
             return Path.home() / "config.ovpn"
 
     def _resolve_overwrite_flag(self, cli_arg):
+        """Resolves overwrite flag from CLI, environment, or config sources.
+
+        Args:
+            cli_arg: Command-line overwrite flag or None
+
+        Returns:
+            bool: Whether to overwrite existing files
+        """
         if cli_arg is not None:
             return cli_arg
         overwrite_str = self._resolve(None, 'OVPN_MANAGER_OVERWRITE', 'overwrite')
@@ -79,6 +95,7 @@ class Config:
 class _CallbackHandler(BaseHTTPRequestHandler):
     """A simple server to handle the OIDC callback and capture the token."""
     def do_GET(self):
+        """Handles OIDC callback GET request and extracts token from query parameters."""
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
@@ -94,6 +111,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             _RECEIVED_TOKEN.append(token)
 
     def log_message(self, format, *args):
+        """Suppresses HTTP server logging by overriding default behavior."""
         return
 
 def _find_free_port():
