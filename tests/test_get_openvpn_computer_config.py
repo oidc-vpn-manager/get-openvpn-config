@@ -566,10 +566,13 @@ class TestMainEntryPoint:
         """Test __main__ entry point is covered."""
         import subprocess
         import sys
+        from pathlib import Path
 
         # Test that the script can be run with --help to cover __main__
+        # Use dynamic path resolution based on current test file location
+        script_path = Path(__file__).parent.parent / 'get_openvpn_computer_config.py'
         result = subprocess.run([
-            sys.executable, '/workspaces/2025-06_openvpn-manager_gh-org/tools/get_openvpn_config/get_openvpn_computer_config.py', '--help'
+            sys.executable, str(script_path), '--help'
         ], capture_output=True, text=True)
 
         assert result.returncode == 0
