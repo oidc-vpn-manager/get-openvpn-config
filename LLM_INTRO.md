@@ -302,7 +302,7 @@ fi
 # Server configuration deployment
 
 HOSTNAME="vpn-$(hostname -f)"
-PSK_FILE="/etc/openvpn-manager/server.psk"
+PSK_FILE="/etc/oidc-vpn-manager/server.psk"
 TARGET_DIR="/etc/openvpn"
 
 if [ ! -f "$PSK_FILE" ]; then

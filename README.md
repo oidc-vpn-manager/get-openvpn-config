@@ -181,7 +181,7 @@ fi
 # Server configuration deployment script
 
 HOSTNAME="vpn-$(hostname -f)"
-PSK_FILE="/etc/openvpn-manager/server.psk"
+PSK_FILE="/etc/oidc-vpn-manager/server.psk"
 TARGET_DIR="/etc/openvpn"
 
 if [ ! -f "$PSK_FILE" ]; then
@@ -213,7 +213,7 @@ fi
 # Administrative script for deploying computer profiles
 
 COMPUTER_NAME="workstation-$(hostname)"
-PSK_FILE="/etc/openvpn-manager/computer.psk"
+PSK_FILE="/etc/oidc-vpn-manager/computer.psk"
 OUTPUT_FILE="/etc/openvpn/client/${COMPUTER_NAME}.ovpn"
 
 if [ ! -f "$PSK_FILE" ]; then
