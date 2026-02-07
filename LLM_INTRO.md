@@ -1,10 +1,10 @@
 # Get OpenVPN Config Tool
 
-This file provides LLMs with guidance for working with the Get OpenVPN Config Tool component of OpenVPN Manager.
+This file provides LLMs with guidance for working with the Get OpenVPN Config Tool component of OIDC VPN Manager.
 
 ## Tool Overview
 
-The Get OpenVPN Config Tools are a collection of specialized command-line clients for retrieving OpenVPN profiles and server bundles from OpenVPN Manager. The tools have been split into three focused scripts:
+The Get OpenVPN Config Tools are a collection of specialized command-line clients for retrieving OpenVPN profiles and server bundles from OIDC VPN Manager. The tools have been split into three focused scripts:
 
 - **`get_openvpn_profile.py`** - End-user profile retrieval via OIDC authentication
 - **`get_openvpn_server_config.py`** - Server configuration bundles via PSK authentication
@@ -84,7 +84,7 @@ python -m pytest tests/test_get_openvpn_server_config.py -v
 python -m pytest tests/test_get_openvpn_computer_config.py -v
 python -m pytest tests/test_get_server_bundle.py -v
 
-# Integration tests (requires running OpenVPN Manager)
+# Integration tests (requires running OIDC VPN Manager)
 export TEST_SERVER_URL=https://test-vpn.company.com
 export TEST_PSK=test-psk-secret
 python -m pytest tests/ -v --integration
@@ -144,7 +144,7 @@ python -m pytest tests/ -v --integration
 ```
 
 ### Configuration Options
-- `--server-url` - OpenVPN Manager base URL (required)
+- `--server-url` - OIDC VPN Manager base URL (required)
 - `--output` - Output file path for user profiles
 - `--options` - Protocol options: udp, tcp, or udp,tcp
 - `--force` - Overwrite existing files

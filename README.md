@@ -1,6 +1,6 @@
 # OpenVPN Config Tools
 
-A collection of command-line clients for retrieving OpenVPN profiles and server bundles from OpenVPN Manager. The tools have been split into three specialized scripts for different use cases:
+A collection of command-line clients for retrieving OpenVPN profiles and server bundles from OIDC VPN Manager. The tools have been split into three specialized scripts for different use cases:
 
 - **`get_openvpn_profile.py`** - User profile retrieval via OIDC authentication
 - **`get_openvpn_server_config.py`** - Server configuration bundles via PSK authentication
@@ -32,7 +32,7 @@ A collection of command-line clients for retrieving OpenVPN profiles and server 
 ### Prerequisites
 - Python 3.8+
 - Modern web browser (for OIDC authentication)
-- Network access to OpenVPN Manager service
+- Network access to OIDC VPN Manager service
 
 ### Install Dependencies
 ```bash
@@ -113,7 +113,7 @@ chmod +x get_openvpn_profile.py get_openvpn_server_config.py get_openvpn_compute
 Create `~/.config/ovpn-manager/config.yaml` for persistent settings:
 
 ```yaml
-# OpenVPN Manager Configuration
+# OIDC VPN Manager Configuration
 server_url: https://vpn.company.com
 output: ~/Downloads/config.ovpn
 overwrite: false
@@ -315,7 +315,7 @@ python -m pytest tests/ -v
 
 ### Integration Testing
 ```bash
-# Test against running OpenVPN Manager instance
+# Test against running OIDC VPN Manager instance
 export TEST_SERVER_URL=https://test-vpn.company.com
 export TEST_PSK=test-psk-secret
 python -m pytest tests/ -v --integration
@@ -353,7 +353,7 @@ python -m pytest tests/ -v --integration
 **PSK Authentication Errors**:
 - Confirm PSK is valid and not expired
 - Check hostname matches server certificate requirements
-- Verify network connectivity to OpenVPN Manager
+- Verify network connectivity to OIDC VPN Manager
 - Review server logs for authentication attempts
 
 **Download Failures**:
