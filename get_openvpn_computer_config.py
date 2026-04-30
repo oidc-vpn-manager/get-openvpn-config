@@ -4,7 +4,17 @@ import click
 import requests
 import yaml
 from pathlib import Path
-from platformdirs import user_downloads_path
+
+
+def _user_downloads_path():
+    """Return the user's Downloads directory if it exists, else home dir.
+
+    Avoids a hard runtime dep on the third-party ``platformdirs`` package so the
+    script can be run as a single file via curl + python3 without pip-installing
+    extras beyond what the rest of the script already needs (click/requests/PyYAML).
+    """
+    candidate = Path.home() / "Downloads"
+    return candidate if candidate.is_dir() else Path.home()
 
 # --- Configuration Logic ---
 
@@ -59,7 +69,7 @@ class Config:
         if path_str:
             return Path(os.path.expanduser(path_str))
         try:
-            downloads_dir = user_downloads_path()
+            downloads_dir = _user_downloads_path()
             return downloads_dir / "computer-config.ovpn"
         except Exception:
             return Path.home() / "computer-config.ovpn"

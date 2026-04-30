@@ -10,6 +10,3 @@ idna==3.10
 
 # Configuration
 PyYAML==6.0.2
-
-# Platform Support
-platformdirs==4.4.0

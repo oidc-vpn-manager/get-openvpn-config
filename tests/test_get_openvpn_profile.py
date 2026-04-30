@@ -417,8 +417,8 @@ class TestConfigurationManagement:
         assert config.options == 'tcp'
 
     def test_config_user_downloads_path_exception_handling(self):
-        """Test handling of user_downloads_path() exceptions."""
-        with patch('get_openvpn_profile.user_downloads_path') as mock_downloads:
+        """Test handling of _user_downloads_path() exceptions."""
+        with patch('get_openvpn_profile._user_downloads_path') as mock_downloads:
             mock_downloads.side_effect = Exception("Downloads path not available")
 
             config = get_openvpn_profile.Config()
