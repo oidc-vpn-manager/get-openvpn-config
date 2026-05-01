@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
+"""Fetches an OpenVPN user profile using the browser-based OIDC login flow.
+
+Stdlib-only CLI dependencies (argparse + json). Configuration files are JSON.
+"""
+import argparse
+import json
 import os
-import click
-import requests
-import webbrowser
 import socket
-import yaml
-import time
+import sys
 import threading
-from pathlib import Path
+import time
+import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from urllib.parse import urlparse, parse_qs
+
+import requests
 
 
 def _user_downloads_path():
@@ -20,10 +27,11 @@ def _user_downloads_path():
     """
     candidate = Path.home() / "Downloads"
     return candidate if candidate.is_dir() else Path.home()
-from urllib.parse import urlparse, parse_qs
+
 
 # A simple list to act as a message queue between threads.
 _RECEIVED_TOKEN = []
+
 
 # --- Configuration Logic ---
 
@@ -32,9 +40,10 @@ class Config:
     Resolves client configuration from multiple sources in a defined order
     of precedence: CLI > Environment > User Config > System Config > Default.
     """
-    def __init__(self, server_url=None, output=None, overwrite=None, options=None, _user_config_path=None, _system_config_path=None):
-        self.user_config_path = _user_config_path or (Path.home() / ".config" / "ovpn-manager" / "config.yaml")
-        self.system_config_path = _system_config_path or Path("/etc/ovpn-manager/config.yaml")
+    def __init__(self, server_url=None, output=None, overwrite=None, options=None,
+                 _user_config_path=None, _system_config_path=None):
+        self.user_config_path = _user_config_path or (Path.home() / ".config" / "ovpn-manager" / "config.json")
+        self.system_config_path = _system_config_path or Path("/etc/ovpn-manager/config.json")
 
         self.user_config = self._load_config_file(self.user_config_path)
         self.system_config = self._load_config_file(self.system_config_path)
@@ -45,12 +54,13 @@ class Config:
         self.options = self._resolve(options, 'OVPN_MANAGER_OPTIONS', 'options')
 
     def _load_config_file(self, path: Path):
-        """Safely loads and parses a YAML file."""
+        """Safely loads and parses a JSON config file."""
         if path.is_file():
             try:
                 with path.open('r') as f:
-                    return yaml.safe_load(f) or {}
-            except (yaml.YAMLError, IOError):
+                    data = json.load(f)
+                    return data if isinstance(data, dict) else {}
+            except (json.JSONDecodeError, IOError):
                 pass
         return {}
 
@@ -67,14 +77,7 @@ class Config:
         return None
 
     def _resolve_output_path(self, cli_arg):
-        """Resolves output file path with fallback to downloads directory.
-
-        Args:
-            cli_arg: Command-line output path argument or None
-
-        Returns:
-            Path: Resolved output file path for profile
-        """
+        """Resolves output file path with fallback to downloads directory."""
         path_str = self._resolve(cli_arg, 'OVPN_MANAGER_OUTPUT', 'output')
         if path_str:
             return Path(os.path.expanduser(path_str))
@@ -85,20 +88,16 @@ class Config:
             return Path.home() / "config.ovpn"
 
     def _resolve_overwrite_flag(self, cli_arg):
-        """Resolves overwrite flag from CLI, environment, or config sources.
-
-        Args:
-            cli_arg: Command-line overwrite flag or None
-
-        Returns:
-            bool: Whether to overwrite existing files
-        """
+        """Resolves overwrite flag from CLI, environment, or config sources."""
         if cli_arg is not None:
             return cli_arg
         overwrite_str = self._resolve(None, 'OVPN_MANAGER_OVERWRITE', 'overwrite')
         if overwrite_str is not None:
+            if isinstance(overwrite_str, bool):
+                return overwrite_str
             return str(overwrite_str).lower() in ['true', '1', 't', 'y', 'yes']
         return False
+
 
 # --- API Client Logic ---
 
@@ -124,11 +123,13 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         """Suppresses HTTP server logging by overriding default behavior."""
         return
 
+
 def _find_free_port():
     """Finds and returns an available TCP port."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(('', 0))
         return s.getsockname()[1]
+
 
 def get_profile_with_oidc(config, output_auth_url=None):
     """Handles the full OIDC browser-based authentication flow."""
@@ -143,7 +144,7 @@ def get_profile_with_oidc(config, output_auth_url=None):
     if output_auth_url:
         # Instead of opening browser, output URL to specified file/stderr
         if output_auth_url == 'stderr':
-            click.echo(f"AUTH_URL: {login_url}", err=True)
+            print(f"AUTH_URL: {login_url}", file=sys.stderr)
         else:
             with open(output_auth_url, 'w') as f:
                 f.write(login_url)
@@ -155,7 +156,7 @@ def get_profile_with_oidc(config, output_auth_url=None):
         time.sleep(1)
         if time.time() > timeout:
             httpd.shutdown()
-            raise click.ClickException("Authentication timed out.")
+            raise RuntimeError("Authentication timed out.")
 
     httpd.shutdown()
     token = _RECEIVED_TOKEN.pop(0)
@@ -165,42 +166,57 @@ def get_profile_with_oidc(config, output_auth_url=None):
     response.raise_for_status()
     return response.content
 
+
 # --- CLI Logic ---
 
-@click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.option('-s', '--server-url', help='The base URL of the configuration server.')
-@click.option('-o', '--output', help='Path to save the OVPN configuration file.')
-@click.option('-f', '--force', is_flag=True, help='Overwrite the output file if it already exists.')
-@click.option('--options', help='A comma-separated list of OVPN options to enable.')
-@click.option('--output-auth-url', help='Output authentication URL to file/stderr instead of opening browser (for testing).')
-def main(server_url, output, force, options, output_auth_url):
-    """Fetches an OpenVPN user profile using the browser-based OIDC login flow."""
+def _build_parser():
+    parser = argparse.ArgumentParser(
+        prog="get_openvpn_profile.py",
+        description="Fetches an OpenVPN user profile using the browser-based OIDC login flow.",
+    )
+    parser.add_argument('-s', '--server-url', help='The base URL of the configuration server.')
+    parser.add_argument('-o', '--output', help='Path to save the OVPN configuration file.')
+    parser.add_argument('-f', '--force', action='store_true',
+                        help='Overwrite the output file if it already exists.')
+    parser.add_argument('--options', help='A comma-separated list of OVPN options to enable.')
+    parser.add_argument('--output-auth-url',
+                        help='Output authentication URL to file/stderr instead of opening browser (for testing).')
+    return parser
+
+
+def main(argv=None):
+    """Entry point. Accepts optional argv list to support direct calls from tests."""
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
     try:
-        config = Config(server_url, output, force, options)
+        config = Config(args.server_url, args.output, args.force or None, args.options)
 
         if not config.server_url:
-            raise click.ClickException("Server URL is not configured.")
+            raise RuntimeError("Server URL is not configured.")
 
         if config.output_path.exists() and not config.overwrite:
-            raise click.ClickException(f"Output file '{config.output_path}' already exists. Use --force to overwrite.")
+            raise RuntimeError(f"Output file '{config.output_path}' already exists. Use --force to overwrite.")
 
         # Test server connectivity before starting OIDC flow
         try:
-            click.echo("Testing server connectivity...")
+            print("Testing server connectivity...")
             test_response = requests.get(f"{config.server_url}/health", timeout=5)
             test_response.raise_for_status()
         except requests.exceptions.RequestException as e:
-            raise click.ClickException(f"Cannot connect to server {config.server_url}: {e}")
+            raise RuntimeError(f"Cannot connect to server {config.server_url}: {e}")
 
-        click.echo("Starting OIDC login flow...")
-        profile_content = get_profile_with_oidc(config, output_auth_url)
+        print("Starting OIDC login flow...")
+        profile_content = get_profile_with_oidc(config, args.output_auth_url)
 
         with open(config.output_path, 'wb') as f:
             f.write(profile_content)
-        click.secho(f"Successfully saved configuration to {config.output_path}", fg="green")
+        print(f"Successfully saved configuration to {config.output_path}")
 
     except Exception as e:
-        raise click.ClickException(f"An error occurred: {e}")
+        print(f"Error: An error occurred: {e}", file=sys.stderr)
+        sys.exit(1)
+
 
 if __name__ == '__main__':
     main()

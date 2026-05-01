@@ -2,9 +2,9 @@
 Tests for the get_openvpn_computer_config.py script - PSK computer profile functionality.
 """
 
+import json
 import pytest
 import requests
-from click.testing import CliRunner
 from unittest.mock import MagicMock, patch, mock_open
 from pathlib import Path
 
@@ -15,133 +15,133 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import get_openvpn_computer_config
 
 
-@pytest.fixture
-def runner():
-    return CliRunner()
+def _run(argv):
+    """Invoke the CLI's ``main`` and return the SystemExit code (0 if no exit)."""
+    try:
+        get_openvpn_computer_config.main(argv)
+    except SystemExit as exc:
+        return exc.code if exc.code is not None else 0
+    return 0
+
+
+def _output(capsys):
+    """Return combined stdout+stderr captured during the most recent call."""
+    captured = capsys.readouterr()
+    return captured.out + captured.err
 
 
 class TestGetOVPNComputerConfig:
     """Test the get_openvpn_computer_config.py main function."""
 
-    def test_help_output(self, runner):
+    def test_help_output(self, capsys):
         """Test that help output is displayed correctly."""
-        result = runner.invoke(get_openvpn_computer_config.main, ['--help'])
-        assert result.exit_code == 0
-        assert "Fetches an OpenVPN computer profile using PSK authentication" in result.output
-        assert "--server-url" in result.output
-        assert "--output" in result.output
-        assert "--force" in result.output
-        assert "--psk" in result.output
+        code = _run(['--help'])
+        assert code == 0
+        out = _output(capsys)
+        assert "Fetches an OpenVPN computer profile using PSK authentication" in out
+        assert "--server-url" in out
+        assert "--output" in out
+        assert "--force" in out
+        assert "--psk" in out
 
     @patch('get_openvpn_computer_config.get_computer_profile_with_psk')
     @patch('builtins.open', new_callable=mock_open)
-    def test_successful_computer_profile_download(self, mock_file, mock_get_profile, runner, tmp_path):
+    def test_successful_computer_profile_download(self, mock_file, mock_get_profile, capsys, tmp_path):
         """Test successful computer profile download with PSK."""
-        # Setup mock response
         mock_get_profile.return_value = b'mock-computer-ovpn-content'
-
-        # Use temp path for output
         output_file = tmp_path / "computer-config.ovpn"
 
-        # Run command
-        result = runner.invoke(get_openvpn_computer_config.main, [
+        code = _run([
             '--server-url', 'https://test-server.com',
             '--output', str(output_file),
             '--psk', 'test-computer-psk',
-            '--force'
+            '--force',
         ])
+        out = _output(capsys)
 
-        # Verify success
-        assert result.exit_code == 0
-        assert "Requesting computer profile with PSK authentication..." in result.output
-        assert f"Successfully saved computer configuration to {output_file}" in result.output
+        assert code == 0
+        assert "Requesting computer profile with PSK authentication..." in out
+        assert f"Successfully saved computer configuration to {output_file}" in out
 
-        # Verify function was called correctly
         mock_get_profile.assert_called_once()
         args = mock_get_profile.call_args
         config = args[0][0]
         psk = args[0][1]
         assert config.server_url == 'https://test-server.com'
         assert config.output_path == output_file
-        assert config.overwrite == True
+        assert config.overwrite is True
         assert psk == 'test-computer-psk'
 
-    def test_missing_server_url(self, runner):
+    def test_missing_server_url(self, capsys):
         """Test error when server URL is not configured."""
-        result = runner.invoke(get_openvpn_computer_config.main, [
-            '--psk', 'test-psk'
-        ])
-        assert result.exit_code == 1
-        assert "Server URL is not configured" in result.output
+        code = _run(['--psk', 'test-psk'])
+        assert code == 1
+        assert "Server URL is not configured" in _output(capsys)
 
-    def test_missing_psk(self, runner):
+    def test_missing_psk(self, capsys):
         """Test error when PSK is not provided."""
-        result = runner.invoke(get_openvpn_computer_config.main, [
-            '--server-url', 'https://test-server.com'
-        ])
-        assert result.exit_code == 2  # Click parameter error
+        code = _run(['--server-url', 'https://test-server.com'])
+        assert code == 2  # argparse parameter error
 
     @patch('get_openvpn_computer_config.Path.exists')
-    def test_file_exists_without_force(self, mock_exists, runner):
+    def test_file_exists_without_force(self, mock_exists, capsys):
         """Test error when output file exists and force is not specified."""
         mock_exists.return_value = True
 
-        result = runner.invoke(get_openvpn_computer_config.main, [
+        code = _run([
             '--server-url', 'https://test-server.com',
             '--output', '/path/to/existing.ovpn',
-            '--psk', 'test-psk'
+            '--psk', 'test-psk',
         ])
 
-        assert result.exit_code == 1
-        assert "already exists. Use --force to overwrite" in result.output
+        assert code == 1
+        assert "already exists. Use --force to overwrite" in _output(capsys)
 
     @patch('get_openvpn_computer_config.get_computer_profile_with_psk')
-    def test_psk_authentication_error(self, mock_get_profile, runner):
+    def test_psk_authentication_error(self, mock_get_profile, capsys):
         """Test handling of PSK authentication errors."""
         mock_get_profile.side_effect = requests.exceptions.HTTPError("401 Unauthorized")
 
-        result = runner.invoke(get_openvpn_computer_config.main, [
+        code = _run([
             '--server-url', 'https://test-server.com',
             '--psk', 'invalid-psk',
-            '--force'
+            '--force',
         ])
 
-        assert result.exit_code == 1
-        assert "401 Unauthorized" in result.output
+        assert code == 1
+        assert "401 Unauthorized" in _output(capsys)
 
     @patch('get_openvpn_computer_config.get_computer_profile_with_psk')
-    def test_network_error_handling(self, mock_get_profile, runner):
+    def test_network_error_handling(self, mock_get_profile, capsys):
         """Test handling of network errors."""
         mock_get_profile.side_effect = requests.exceptions.ConnectionError("Network error")
 
-        result = runner.invoke(get_openvpn_computer_config.main, [
+        code = _run([
             '--server-url', 'https://test-server.com',
             '--psk', 'test-psk',
-            '--force'
+            '--force',
         ])
 
-        assert result.exit_code == 1
-        assert "Network error" in result.output
+        assert code == 1
+        assert "Network error" in _output(capsys)
 
-    def test_default_output_filename(self, runner):
+    def test_default_output_filename(self, capsys):
         """Test that default output filename is computer-config.ovpn."""
         with patch('get_openvpn_computer_config.get_computer_profile_with_psk') as mock_get_profile:
             mock_get_profile.return_value = b'content'
 
             with patch('builtins.open', mock_open()):
-                result = runner.invoke(get_openvpn_computer_config.main, [
+                code = _run([
                     '--server-url', 'https://test-server.com',
                     '--psk', 'test-psk',
-                    '--force'
+                    '--force',
                 ])
 
-                assert result.exit_code == 0
-
-                # Verify config was created with default filename
+                assert code == 0
                 config = mock_get_profile.call_args[0][0]
                 assert config.output_path.name == "computer-config.ovpn"
 
-    def test_psk_from_environment_variable(self, runner, monkeypatch):
+    def test_psk_from_environment_variable(self, capsys, monkeypatch):
         """Test PSK resolution from environment variable."""
         monkeypatch.setenv('OVPN_PSK', 'env-psk-secret')
 
@@ -149,14 +149,12 @@ class TestGetOVPNComputerConfig:
             mock_get_profile.return_value = b'content'
 
             with patch('builtins.open', mock_open()):
-                result = runner.invoke(get_openvpn_computer_config.main, [
+                code = _run([
                     '--server-url', 'https://test-server.com',
-                    '--force'
+                    '--force',
                 ])
 
-                assert result.exit_code == 0
-
-                # Verify PSK from environment was used
+                assert code == 0
                 psk = mock_get_profile.call_args[0][1]
                 assert psk == 'env-psk-secret'
 
@@ -167,26 +165,19 @@ class TestComputerPSKAuthentication:
     @patch('get_openvpn_computer_config.requests.get')
     def test_get_computer_profile_with_psk_success(self, mock_get):
         """Test successful computer PSK authentication and profile retrieval."""
-        # Setup mock response
         mock_response = MagicMock()
         mock_response.content = b'computer-profile-content'
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
 
-        # Setup config
         config = get_openvpn_computer_config.Config(server_url='https://test-server.com')
-
-        # Call function
         result = get_openvpn_computer_config.get_computer_profile_with_psk(config, 'computer-psk-secret')
 
-        # Verify correct API call to computer bundle endpoint
         mock_get.assert_called_once_with(
             'https://test-server.com/api/v1/computer/bundle',
             headers={'Authorization': 'Bearer computer-psk-secret'},
-            timeout=30
+            timeout=30,
         )
-
-        # Verify result
         assert result == b'computer-profile-content'
 
     @patch('get_openvpn_computer_config.requests.get')
@@ -227,34 +218,33 @@ class TestConfigurationManagement:
 
     def test_config_precedence_server_url(self, monkeypatch, tmp_path):
         """Test configuration precedence for server URL."""
-        # Create config files
-        user_config = tmp_path / "user.yaml"
-        user_config.write_text("server_url: https://user.com\n")
+        user_config = tmp_path / "user.json"
+        user_config.write_text(json.dumps({"server_url": "https://user.com"}))
 
-        system_config = tmp_path / "system.yaml"
-        system_config.write_text("server_url: https://system.com\n")
+        system_config = tmp_path / "system.json"
+        system_config.write_text(json.dumps({"server_url": "https://system.com"}))
 
-        # Test CLI override
+        # CLI override
         config = get_openvpn_computer_config.Config(
             server_url='https://cli.com',
             _user_config_path=user_config,
-            _system_config_path=system_config
+            _system_config_path=system_config,
         )
         assert config.server_url == 'https://cli.com'
 
-        # Test environment override
+        # Environment override
         monkeypatch.setenv('OVPN_MANAGER_URL', 'https://env.com')
         config = get_openvpn_computer_config.Config(
             _user_config_path=user_config,
-            _system_config_path=system_config
+            _system_config_path=system_config,
         )
         assert config.server_url == 'https://env.com'
 
-        # Test user config precedence
+        # User config precedence
         monkeypatch.delenv('OVPN_MANAGER_URL', raising=False)
         config = get_openvpn_computer_config.Config(
             _user_config_path=user_config,
-            _system_config_path=system_config
+            _system_config_path=system_config,
         )
         assert config.server_url == 'https://user.com'
 
@@ -262,7 +252,6 @@ class TestConfigurationManagement:
         """Test output path defaults and resolution."""
         config = get_openvpn_computer_config.Config()
 
-        # Should default to downloads directory with computer-config.ovpn filename
         assert config.output_path.name == "computer-config.ovpn"
         assert isinstance(config.output_path, Path)
 
@@ -276,38 +265,37 @@ class TestConfigurationManagement:
 
     def test_config_overwrite_flag_resolution(self, monkeypatch, tmp_path):
         """Test overwrite flag resolution from various sources."""
-        user_config = tmp_path / "user.yaml"
-        user_config.write_text("overwrite: true\n")
+        user_config = tmp_path / "user.json"
+        user_config.write_text(json.dumps({"overwrite": True}))
 
-        # Test CLI override
+        # CLI override
         config = get_openvpn_computer_config.Config(
             overwrite=False,
-            _user_config_path=user_config
+            _user_config_path=user_config,
         )
-        assert config.overwrite == False
+        assert config.overwrite is False
 
-        # Test environment variable
+        # Environment variable
         monkeypatch.setenv('OVPN_MANAGER_OVERWRITE', 'true')
         config = get_openvpn_computer_config.Config(
-            _user_config_path=Path("/nonexistent")
+            _user_config_path=Path("/nonexistent"),
         )
-        assert config.overwrite == True
+        assert config.overwrite is True
 
-        # Test various boolean string representations
         for true_val in ['true', '1', 't', 'y', 'yes']:
             monkeypatch.setenv('OVPN_MANAGER_OVERWRITE', true_val)
             config = get_openvpn_computer_config.Config()
-            assert config.overwrite == True
+            assert config.overwrite is True
 
         for false_val in ['false', '0', 'f', 'n', 'no']:
             monkeypatch.setenv('OVPN_MANAGER_OVERWRITE', false_val)
             config = get_openvpn_computer_config.Config()
-            assert config.overwrite == False
+            assert config.overwrite is False
 
-    def test_config_malformed_yaml_handling(self, tmp_path):
-        """Test handling of malformed YAML config files."""
-        malformed_config = tmp_path / "malformed.yaml"
-        malformed_config.write_text("invalid: yaml: content: [")
+    def test_config_malformed_json_handling(self, tmp_path):
+        """Test handling of malformed JSON config files."""
+        malformed_config = tmp_path / "malformed.json"
+        malformed_config.write_text("{ this is not: valid json [")
 
         # Should not raise exception, should return None for server_url
         config = get_openvpn_computer_config.Config(_user_config_path=malformed_config)
@@ -316,8 +304,8 @@ class TestConfigurationManagement:
     def test_config_missing_config_file_handling(self):
         """Test handling of missing config files."""
         config = get_openvpn_computer_config.Config(
-            _user_config_path=Path("/nonexistent/user.yaml"),
-            _system_config_path=Path("/nonexistent/system.yaml")
+            _user_config_path=Path("/nonexistent/user.json"),
+            _system_config_path=Path("/nonexistent/system.json"),
         )
         assert config.server_url is None
 
@@ -331,16 +319,20 @@ class TestConfigurationManagement:
 
         assert config.server_url == 'https://env-server.com'
         assert str(config.output_path).endswith('my-computer-config.ovpn')
-        assert config.overwrite == True
+        assert config.overwrite is True
 
     def test_config_system_config_file_resolution(self, tmp_path):
         """Test system config file resolution (fallback to system config)."""
-        system_config = tmp_path / "system_config.yaml"
-        system_config.write_text("server_url: https://system.example.com\noutput: /system/config.ovpn\noverwrite: true")
+        system_config = tmp_path / "system_config.json"
+        system_config.write_text(json.dumps({
+            "server_url": "https://system.example.com",
+            "output": "/system/config.ovpn",
+            "overwrite": True,
+        }))
 
         config = get_openvpn_computer_config.Config(
-            _user_config_path=Path("/nonexistent/user/config.yaml"),
-            _system_config_path=system_config
+            _user_config_path=Path("/nonexistent/user/config.json"),
+            _system_config_path=system_config,
         )
 
         assert config.server_url == 'https://system.example.com'
@@ -354,7 +346,6 @@ class TestConfigurationManagement:
 
             config = get_openvpn_computer_config.Config()
 
-            # Should fallback to home directory
             expected_path = Path.home() / "computer-config.ovpn"
             assert config.output_path == expected_path
 
@@ -373,7 +364,6 @@ class TestSecurityAndErrorHandling:
 
         get_openvpn_computer_config.get_computer_profile_with_psk(config, 'secret-computer-psk-123')
 
-        # Verify Authorization header is properly formatted
         call_args = mock_get.call_args
         headers = call_args[1]['headers']
         assert headers['Authorization'] == 'Bearer secret-computer-psk-123'
@@ -389,7 +379,6 @@ class TestSecurityAndErrorHandling:
 
         get_openvpn_computer_config.get_computer_profile_with_psk(config, 'test-computer-psk')
 
-        # Verify timeout is set
         call_args = mock_get.call_args
         assert call_args[1]['timeout'] == 30
 
@@ -404,61 +393,55 @@ class TestSecurityAndErrorHandling:
 
         get_openvpn_computer_config.get_computer_profile_with_psk(config, 'test-psk')
 
-        # Verify correct endpoint is called
         call_args = mock_get.call_args
         url = call_args[0][0]
         assert url == 'https://secure-server.com/api/v1/computer/bundle'
 
     @patch('get_openvpn_computer_config.get_computer_profile_with_psk')
-    def test_error_message_security(self, mock_get_profile, runner):
+    def test_error_message_security(self, mock_get_profile, capsys):
         """Test that error messages don't expose sensitive information."""
-        # Simulate an error that might contain sensitive info
         mock_get_profile.side_effect = Exception("Internal error with PSK: secret-psk-123")
 
-        result = runner.invoke(get_openvpn_computer_config.main, [
+        code = _run([
             '--server-url', 'https://test-server.com',
             '--psk', 'secret-psk-123',
-            '--force'
+            '--force',
         ])
 
-        assert result.exit_code == 1
-        # The error message should be displayed but PSK should not be leaked in logs
-        assert "An error occurred" in result.output
+        assert code == 1
+        assert "An error occurred" in _output(capsys)
 
-    def test_file_path_validation(self, runner):
+    def test_file_path_validation(self, capsys):
         """Test validation of file paths."""
         with patch('get_openvpn_computer_config.get_computer_profile_with_psk') as mock_get_profile:
             mock_get_profile.return_value = b'content'
 
             with patch('builtins.open', mock_open()):
-                # Test with absolute path
-                result = runner.invoke(get_openvpn_computer_config.main, [
+                code = _run([
                     '--server-url', 'https://test-server.com',
                     '--output', '/tmp/computer-config.ovpn',
                     '--psk', 'test-psk',
-                    '--force'
+                    '--force',
                 ])
 
-                assert result.exit_code == 0
-
-                # Verify path was handled correctly
+                assert code == 0
                 config = mock_get_profile.call_args[0][0]
                 assert config.output_path == Path('/tmp/computer-config.ovpn')
 
-    def test_psk_handling_security(self, runner):
+    def test_psk_handling_security(self, capsys):
         """Test that PSK is handled securely and not exposed in error messages."""
         with patch('get_openvpn_computer_config.get_computer_profile_with_psk') as mock_get_profile:
             mock_get_profile.side_effect = requests.exceptions.HTTPError("Authentication failed")
 
-            result = runner.invoke(get_openvpn_computer_config.main, [
+            code = _run([
                 '--server-url', 'https://test-server.com',
                 '--psk', 'very-secret-computer-psk',
-                '--force'
+                '--force',
             ])
 
-            assert result.exit_code == 1
-            # PSK should not appear in output
-            assert 'very-secret-computer-psk' not in result.output
+            assert code == 1
+            # PSK must not appear in output
+            assert 'very-secret-computer-psk' not in _output(capsys)
 
     def test_computer_vs_server_endpoint_differentiation(self):
         """Test that computer profile uses different endpoint than server profile."""
@@ -471,7 +454,6 @@ class TestSecurityAndErrorHandling:
 
             get_openvpn_computer_config.get_computer_profile_with_psk(config, 'test-psk')
 
-            # Verify it calls the computer bundle endpoint, not server bundle
             call_args = mock_get.call_args
             url = call_args[0][0]
             assert '/api/v1/computer/bundle' in url
@@ -481,7 +463,7 @@ class TestSecurityAndErrorHandling:
 class TestIntegrationScenarios:
     """Test integration scenarios and edge cases."""
 
-    def test_complete_workflow_success(self, runner, tmp_path):
+    def test_complete_workflow_success(self, capsys, tmp_path):
         """Test complete workflow from command line to file output."""
         output_file = tmp_path / "test-computer.ovpn"
         expected_content = b'# OpenVPN Computer Configuration\nclient\nremote vpn.example.com 1194 udp\n'
@@ -490,33 +472,29 @@ class TestIntegrationScenarios:
             mock_get_profile.return_value = expected_content
 
             with patch('builtins.open', mock_open()) as mock_file:
-                result = runner.invoke(get_openvpn_computer_config.main, [
+                code = _run([
                     '--server-url', 'https://vpn.example.com',
                     '--output', str(output_file),
                     '--psk', 'computer-psk-secret',
-                    '--force'
+                    '--force',
                 ])
 
-                assert result.exit_code == 0
-
-                # Verify file was written
+                assert code == 0
                 mock_file.assert_called_with(output_file, 'wb')
                 handle = mock_file()
                 handle.write.assert_called_once_with(expected_content)
 
-    def test_configuration_precedence_integration(self, runner, tmp_path, monkeypatch):
+    def test_configuration_precedence_integration(self, capsys, tmp_path, monkeypatch):
         """Test configuration precedence in realistic scenario."""
-        # Setup config file
         config_dir = tmp_path / ".config" / "ovpn-manager"
         config_dir.mkdir(parents=True)
-        config_file = config_dir / "config.yaml"
-        config_file.write_text("""
-server_url: https://config-file.com
-output: ~/config-computer.ovpn
-overwrite: false
-""")
+        config_file = config_dir / "config.json"
+        config_file.write_text(json.dumps({
+            "server_url": "https://config-file.com",
+            "output": "~/config-computer.ovpn",
+            "overwrite": False,
+        }))
 
-        # Setup environment
         monkeypatch.setenv('OVPN_MANAGER_URL', 'https://env-server.com')
         monkeypatch.setenv('OVPN_PSK', 'env-psk-secret')
 
@@ -524,38 +502,34 @@ overwrite: false
             mock_get_profile.return_value = b'content'
 
             with patch('builtins.open', mock_open()):
-                # CLI should override environment and config file
-                result = runner.invoke(get_openvpn_computer_config.main, [
+                # CLI overrides environment and config file
+                code = _run([
                     '--server-url', 'https://cli-server.com',
-                    '--force'
+                    '--force',
                 ])
 
-                assert result.exit_code == 0
-
-                # Verify CLI server URL was used, but env PSK was used
+                assert code == 0
                 config = mock_get_profile.call_args[0][0]
                 psk = mock_get_profile.call_args[0][1]
                 assert config.server_url == 'https://cli-server.com'
                 assert psk == 'env-psk-secret'
 
-    def test_error_recovery_and_cleanup(self, runner, tmp_path):
+    def test_error_recovery_and_cleanup(self, capsys, tmp_path):
         """Test error recovery and proper cleanup on failures."""
         output_file = tmp_path / "test-computer.ovpn"
 
         with patch('get_openvpn_computer_config.get_computer_profile_with_psk') as mock_get_profile:
             mock_get_profile.side_effect = requests.exceptions.ConnectionError("Network failure")
 
-            result = runner.invoke(get_openvpn_computer_config.main, [
+            code = _run([
                 '--server-url', 'https://test-server.com',
                 '--output', str(output_file),
                 '--psk', 'test-psk',
-                '--force'
+                '--force',
             ])
 
-            assert result.exit_code == 1
-            assert "Network failure" in result.output
-
-            # Verify no partial file was created
+            assert code == 1
+            assert "Network failure" in _output(capsys)
             assert not output_file.exists()
 
 
@@ -568,11 +542,9 @@ class TestMainEntryPoint:
         import sys
         from pathlib import Path
 
-        # Test that the script can be run with --help to cover __main__
-        # Use dynamic path resolution based on current test file location
         script_path = Path(__file__).parent.parent / 'get_openvpn_computer_config.py'
         result = subprocess.run([
-            sys.executable, str(script_path), '--help'
+            sys.executable, str(script_path), '--help',
         ], capture_output=True, text=True)
 
         assert result.returncode == 0

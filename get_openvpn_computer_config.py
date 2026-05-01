@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
+"""Fetches an OpenVPN computer profile using PSK authentication.
+
+Stdlib-only CLI dependencies (argparse + json). Configuration files are JSON.
+"""
+import argparse
+import json
 import os
-import click
-import requests
-import yaml
+import sys
 from pathlib import Path
+
+import requests
 
 
 def _user_downloads_path():
@@ -11,10 +17,11 @@ def _user_downloads_path():
 
     Avoids a hard runtime dep on the third-party ``platformdirs`` package so the
     script can be run as a single file via curl + python3 without pip-installing
-    extras beyond what the rest of the script already needs (click/requests/PyYAML).
+    extras beyond what the rest of the script already needs.
     """
     candidate = Path.home() / "Downloads"
     return candidate if candidate.is_dir() else Path.home()
+
 
 # --- Configuration Logic ---
 
@@ -24,8 +31,8 @@ class Config:
     of precedence: CLI > Environment > User Config > System Config > Default.
     """
     def __init__(self, server_url=None, output=None, overwrite=None, _user_config_path=None, _system_config_path=None):
-        self.user_config_path = _user_config_path or (Path.home() / ".config" / "ovpn-manager" / "config.yaml")
-        self.system_config_path = _system_config_path or Path("/etc/ovpn-manager/config.yaml")
+        self.user_config_path = _user_config_path or (Path.home() / ".config" / "ovpn-manager" / "config.json")
+        self.system_config_path = _system_config_path or Path("/etc/ovpn-manager/config.json")
 
         self.user_config = self._load_config_file(self.user_config_path)
         self.system_config = self._load_config_file(self.system_config_path)
@@ -35,12 +42,13 @@ class Config:
         self.overwrite = self._resolve_overwrite_flag(overwrite)
 
     def _load_config_file(self, path: Path):
-        """Safely loads and parses a YAML file."""
+        """Safely loads and parses a JSON config file."""
         if path.is_file():
             try:
                 with path.open('r') as f:
-                    return yaml.safe_load(f) or {}
-            except (yaml.YAMLError, IOError):
+                    data = json.load(f)
+                    return data if isinstance(data, dict) else {}
+            except (json.JSONDecodeError, IOError):
                 pass
         return {}
 
@@ -57,14 +65,7 @@ class Config:
         return None
 
     def _resolve_output_path(self, cli_arg):
-        """Resolves output file path with fallback to downloads directory.
-
-        Args:
-            cli_arg: Command-line output path argument or None
-
-        Returns:
-            Path: Resolved output file path for computer profile
-        """
+        """Resolves output file path with fallback to downloads directory."""
         path_str = self._resolve(cli_arg, 'OVPN_MANAGER_OUTPUT', 'output')
         if path_str:
             return Path(os.path.expanduser(path_str))
@@ -75,20 +76,16 @@ class Config:
             return Path.home() / "computer-config.ovpn"
 
     def _resolve_overwrite_flag(self, cli_arg):
-        """Resolves overwrite flag from CLI, environment, or config sources.
-
-        Args:
-            cli_arg: Command-line overwrite flag or None
-
-        Returns:
-            bool: Whether to overwrite existing files
-        """
+        """Resolves overwrite flag from CLI, environment, or config sources."""
         if cli_arg is not None:
             return cli_arg
         overwrite_str = self._resolve(None, 'OVPN_MANAGER_OVERWRITE', 'overwrite')
         if overwrite_str is not None:
+            if isinstance(overwrite_str, bool):
+                return overwrite_str
             return str(overwrite_str).lower() in ['true', '1', 't', 'y', 'yes']
         return False
+
 
 # --- API Client Logic ---
 
@@ -101,33 +98,51 @@ def get_computer_profile_with_psk(config, psk):
     response.raise_for_status()
     return response.content
 
+
 # --- CLI Logic ---
 
-@click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.option('-s', '--server-url', help='The base URL of the configuration server.')
-@click.option('-o', '--output', help='Path to save the OVPN configuration file.')
-@click.option('-f', '--force', is_flag=True, help='Overwrite the output file if it already exists.')
-@click.option('--psk', required=True, envvar='OVPN_PSK', help='The pre-shared key for the computer.')
-def main(server_url, output, force, psk):
-    """Fetches an OpenVPN computer profile using PSK authentication for pre-determined configurations."""
+def _build_parser():
+    parser = argparse.ArgumentParser(
+        prog="get_openvpn_computer_config.py",
+        description="Fetches an OpenVPN computer profile using PSK authentication for pre-determined configurations.",
+    )
+    parser.add_argument('-s', '--server-url', help='The base URL of the configuration server.')
+    parser.add_argument('-o', '--output', help='Path to save the OVPN configuration file.')
+    parser.add_argument('-f', '--force', action='store_true',
+                        help='Overwrite the output file if it already exists.')
+    parser.add_argument('--psk', default=os.environ.get('OVPN_PSK'),
+                        help='The pre-shared key for the computer. Can also be supplied via the OVPN_PSK environment variable.')
+    return parser
+
+
+def main(argv=None):
+    """Entry point. Accepts optional argv list to support direct calls from tests."""
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    if not args.psk:
+        parser.error("the following arguments are required: --psk")
+
     try:
-        config = Config(server_url, output, force)
+        config = Config(args.server_url, args.output, args.force or None)
 
         if not config.server_url:
-            raise click.ClickException("Server URL is not configured.")
+            raise RuntimeError("Server URL is not configured.")
 
         if config.output_path.exists() and not config.overwrite:
-            raise click.ClickException(f"Output file '{config.output_path}' already exists. Use --force to overwrite.")
+            raise RuntimeError(f"Output file '{config.output_path}' already exists. Use --force to overwrite.")
 
-        click.echo("Requesting computer profile with PSK authentication...")
-        profile_content = get_computer_profile_with_psk(config, psk)
+        print("Requesting computer profile with PSK authentication...")
+        profile_content = get_computer_profile_with_psk(config, args.psk)
 
         with open(config.output_path, 'wb') as f:
             f.write(profile_content)
-        click.secho(f"Successfully saved computer configuration to {config.output_path}", fg="green")
+        print(f"Successfully saved computer configuration to {config.output_path}")
 
     except Exception as e:
-        raise click.ClickException(f"An error occurred: {e}")
+        print(f"Error: An error occurred: {e}", file=sys.stderr)
+        sys.exit(1)
+
 
 if __name__ == '__main__':
     main()
