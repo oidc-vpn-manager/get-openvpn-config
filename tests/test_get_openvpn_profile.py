@@ -411,6 +411,18 @@ class TestConfigurationManagement:
         assert config.overwrite is True
         assert config.options == 'tcp'
 
+    def test_config_strips_trailing_slash_from_server_url(self, monkeypatch):
+        """Trailing slashes on the server URL must be stripped to avoid double-slash request paths."""
+        config = get_openvpn_profile.Config(server_url='https://test.com/')
+        assert config.server_url == 'https://test.com'
+
+        config = get_openvpn_profile.Config(server_url='https://test.com///')
+        assert config.server_url == 'https://test.com'
+
+        monkeypatch.setenv('OVPN_MANAGER_URL', 'https://env.com/')
+        config = get_openvpn_profile.Config()
+        assert config.server_url == 'https://env.com'
+
     def test_config_user_downloads_path_exception_handling(self):
         """Test handling of _user_downloads_path() exceptions."""
         with patch('get_openvpn_profile._user_downloads_path') as mock_downloads:

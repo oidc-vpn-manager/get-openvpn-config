@@ -37,7 +37,8 @@ class Config:
         self.user_config = self._load_config_file(self.user_config_path)
         self.system_config = self._load_config_file(self.system_config_path)
 
-        self.server_url = self._resolve(server_url, 'OVPN_MANAGER_URL', 'server_url')
+        resolved_url = self._resolve(server_url, 'OVPN_MANAGER_URL', 'server_url')
+        self.server_url = resolved_url.rstrip('/') if resolved_url else resolved_url
         self.output_path = self._resolve_output_path(output)
         self.overwrite = self._resolve_overwrite_flag(overwrite)
 

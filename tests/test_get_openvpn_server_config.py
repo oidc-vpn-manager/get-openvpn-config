@@ -374,6 +374,18 @@ class TestConfigurationManagement:
         config = get_openvpn_server_config.Config(_user_config_path=malformed_config)
         assert config.server_url is None
 
+    def test_config_strips_trailing_slash_from_server_url(self, monkeypatch):
+        """Trailing slashes on the server URL must be stripped to avoid double-slash request paths."""
+        config = get_openvpn_server_config.Config(server_url='https://test.com/')
+        assert config.server_url == 'https://test.com'
+
+        config = get_openvpn_server_config.Config(server_url='https://test.com///')
+        assert config.server_url == 'https://test.com'
+
+        monkeypatch.setenv('OVPN_MANAGER_URL', 'https://env.com/')
+        config = get_openvpn_server_config.Config()
+        assert config.server_url == 'https://env.com'
+
     def test_config_missing_files_handling(self):
         """Test handling of missing configuration files."""
         config = get_openvpn_server_config.Config(
