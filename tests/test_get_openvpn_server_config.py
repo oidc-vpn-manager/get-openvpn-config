@@ -192,7 +192,7 @@ class TestPSKAuthentication:
 
         mock_get.assert_called_once_with(
             'https://test-server.com/api/v1/server/bundle',
-            headers={'Authorization': 'Bearer test-psk-secret'},
+            headers={'Authorization': 'Bearer test-psk-secret', 'User-Agent': 'get-openvpn-config/1'},
             timeout=30,
         )
         assert result == b'server-bundle-content'

@@ -12,6 +12,18 @@ from pathlib import Path
 import requests
 
 
+# User-Agent sent on every request to the OIDC VPN Manager server.
+#
+# Security considerations:
+#   - The server may sit behind a CDN or WAF that refuses generic HTTP-library
+#     user agents (python-requests/<version>), which turns every download into
+#     a 403 before it reaches the server. Naming the tool avoids that and
+#     identifies the client in the server's logs.
+#   - The requests default discloses the library and its exact version to
+#     anyone observing the traffic; this value names only the tool.
+USER_AGENT = "get-openvpn-config/1"
+
+
 def _user_downloads_path():
     """Return the user's Downloads directory if it exists, else home dir.
 
@@ -93,7 +105,7 @@ class Config:
 def get_computer_profile_with_psk(config, psk):
     """Handles PSK-based authentication for computer profile retrieval."""
     url = f"{config.server_url}/api/v1/computer/bundle"
-    headers = {'Authorization': f'Bearer {psk}'}
+    headers = {'Authorization': f'Bearer {psk}', 'User-Agent': USER_AGENT}
 
     response = requests.get(url, headers=headers, timeout=30)
     response.raise_for_status()

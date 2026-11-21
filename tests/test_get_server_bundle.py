@@ -38,7 +38,7 @@ class TestServerBundleIntegration:
             # Verify correct endpoint was called
             mock_get.assert_called_once_with(
                 'http://test-server/api/v1/server/bundle',
-                headers={'Authorization': 'Bearer test-psk'},
+                headers={'Authorization': 'Bearer test-psk', 'User-Agent': 'get-openvpn-config/1'},
                 timeout=30
             )
             

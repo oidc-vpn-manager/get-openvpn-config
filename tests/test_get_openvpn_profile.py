@@ -216,6 +216,7 @@ class TestOIDCAuthentication:
 
             mock_requests.assert_called_once_with(
                 'https://test.com/download?token=test-token',
+                headers={'User-Agent': 'get-openvpn-config/1'},
                 timeout=30,
             )
 
