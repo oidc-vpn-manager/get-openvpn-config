@@ -18,6 +18,18 @@ from urllib.parse import urlparse, parse_qs
 import requests
 
 
+# User-Agent sent on every request to the OIDC VPN Manager server.
+#
+# Security considerations:
+#   - The server may sit behind a CDN or WAF that refuses generic HTTP-library
+#     user agents (python-requests/<version>), which turns every download into
+#     a 403 before it reaches the server. Naming the tool avoids that and
+#     identifies the client in the server's logs.
+#   - The requests default discloses the library and its exact version to
+#     anyone observing the traffic; this value names only the tool.
+USER_AGENT = "get-openvpn-config/1"
+
+
 def _user_downloads_path():
     """Return the user's Downloads directory if it exists, else home dir.
 
@@ -163,7 +175,7 @@ def get_profile_with_oidc(config, output_auth_url=None):
     token = _RECEIVED_TOKEN.pop(0)
 
     download_url = f"{config.server_url}/download?token={token}"
-    response = requests.get(download_url, timeout=30)
+    response = requests.get(download_url, headers={'User-Agent': USER_AGENT}, timeout=30)
     response.raise_for_status()
     return response.content
 
@@ -202,7 +214,11 @@ def main(argv=None):
         # Test server connectivity before starting OIDC flow
         try:
             print("Testing server connectivity...")
-            test_response = requests.get(f"{config.server_url}/health", timeout=5)
+            test_response = requests.get(
+                f"{config.server_url}/health",
+                headers={'User-Agent': USER_AGENT},
+                timeout=5,
+            )
             test_response.raise_for_status()
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"Cannot connect to server {config.server_url}: {e}")

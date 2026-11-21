@@ -23,6 +23,7 @@ The Get OpenVPN Config Tools are a collection of specialized command-line client
   - `test_get_openvpn_server_config.py` - Server configuration functionality tests
   - `test_get_openvpn_computer_config.py` - Computer profile functionality tests
   - `test_get_server_bundle.py` - Server bundle functionality tests
+  - `test_user_agent.py` - User-Agent header tests (checked on the wire with pytest-httpserver)
   - `requirements.txt` - Test dependencies
 - `requirements.txt` - Runtime dependencies
 - `README.md` - Comprehensive usage documentation
@@ -226,6 +227,7 @@ target-dir/
 - **Certificate Validation**: Server certificate verification
 - **Secure Downloads**: Tamper-evident file transfers
 - **Request Validation**: Input sanitization and validation
+- **Tool User-Agent**: Every request sends `User-Agent: get-openvpn-config/1` (`USER_AGENT` in each script). A CDN or WAF in front of the server may refuse generic library user agents such as `python-requests/<version>`, and the default discloses the library version. Each script is standalone, so each defines the constant; keep them identical.
 
 ### Credential Management
 - **PSK Security**: Secure handling of pre-shared keys
@@ -377,6 +379,7 @@ spec:
 - **Network Errors**: Connectivity and firewall issues
 - **File Permissions**: Write access and ownership
 - **PSK Authentication**: Key validity and format
+- **403 before reaching the server**: a CDN or WAF refusing the client's User-Agent. Every request must carry `USER_AGENT`; check with `curl -A get-openvpn-config/1 <server>/health`.
 
 ### Debug Features
 - **Verbose Logging**: Detailed operation logging

@@ -175,7 +175,7 @@ class TestComputerPSKAuthentication:
 
         mock_get.assert_called_once_with(
             'https://test-server.com/api/v1/computer/bundle',
-            headers={'Authorization': 'Bearer computer-psk-secret'},
+            headers={'Authorization': 'Bearer computer-psk-secret', 'User-Agent': 'get-openvpn-config/1'},
             timeout=30,
         )
         assert result == b'computer-profile-content'

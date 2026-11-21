@@ -339,6 +339,7 @@ python -m pytest tests/ -v --integration
 - **TLS Verification**: Always verify TLS certificates
 - **Network Isolation**: Use secure networks for profile retrieval
 - **Firewall Configuration**: Allow only necessary network access
+- **User-Agent**: Every request identifies itself as `get-openvpn-config/1`, so a CDN or WAF in front of the server can tell the tool apart from generic scripts. If you put the server behind one, allow that User-Agent.
 
 ## ❓ Troubleshooting
 
